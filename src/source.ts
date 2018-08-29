@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as PropTypes from 'prop-types';
-import { Map, GeoJSONSource, GeoJSONSourceRaw, Layer } from 'mapbox-gl';
+import { Map, ImageSource, GeoJSONSource, GeoJSONSourceRaw, Layer } from 'mapbox-gl';
 import { TilesJson } from './util/types';
 
 export interface Context {
@@ -10,9 +10,10 @@ export interface Context {
 export interface Props {
   id: string;
   geoJsonSource?: GeoJSONSourceRaw;
+  imageSource?: ImageSource;
   tileJsonSource?: TilesJson;
-  onSourceAdded?: (source: GeoJSONSource | TilesJson) => void;
-  onSourceLoaded?: (source: GeoJSONSource | TilesJson) => void;
+  onSourceAdded?: (source: GeoJSONSource | ImageSource | TilesJson) => void;
+  onSourceLoaded?: (source: GeoJSONSource | ImageSource | TilesJson) => void;
 }
 
 export interface LayerWithBefore extends Layer {
@@ -46,13 +47,15 @@ export default class Source extends React.Component<Props> {
 
   private initialize = () => {
     const { map } = this.context;
-    const { geoJsonSource, tileJsonSource, onSourceAdded } = this.props;
+    const { geoJsonSource, imageSource, tileJsonSource, onSourceAdded } = this.props;
 
-    if (!map.getSource(this.id) && (geoJsonSource || tileJsonSource)) {
+    if (!map.getSource(this.id) && (geoJsonSource || imageSource || tileJsonSource)) {
       if (geoJsonSource) {
         map.addSource(this.id, geoJsonSource);
       } else if (tileJsonSource) {
         map.addSource(this.id, tileJsonSource);
+      } else if (imageSource) {
+        map.addSource(this.id, imageSource);
       }
 
       map.on('sourcedata', this.onData);
@@ -72,6 +75,8 @@ export default class Source extends React.Component<Props> {
       return;
     }
 
+    map.off('sourcedata', this.onData);
+
     const { onSourceLoaded } = this.props;
     if (source && onSourceLoaded) {
       onSourceLoaded(source);
@@ -80,7 +85,10 @@ export default class Source extends React.Component<Props> {
     if (source && this.props.geoJsonSource && this.props.geoJsonSource.data) {
       source.setData(this.props.geoJsonSource.data);
     }
-    map.off('sourcedata', this.onData);
+    if (source && this.props.imageSource && this.props.imageSource.coordinates) {
+      const isource = map.getSource(this.props.id) as ImageSource;
+      isource.setCoordinates(this.props.imageSource.coordinates);
+    }
   };
 
   public removeSource(): LayerWithBefore[] {
@@ -118,7 +126,7 @@ export default class Source extends React.Component<Props> {
   }
 
   public componentWillReceiveProps(props: Props) {
-    const { geoJsonSource, tileJsonSource } = this.props;
+    const { geoJsonSource, tileJsonSource, imageSource } = this.props;
     const { map } = this.context;
 
     // Update tilesJsonSource
@@ -148,6 +156,18 @@ export default class Source extends React.Component<Props> {
     ) {
       const source = map.getSource(this.id) as GeoJSONSource;
       source.setData(props.geoJsonSource.data);
+    }
+
+    // Update imageSource
+    if (
+      imageSource &&
+      props.imageSource &&
+      props.imageSource.coordinates !== imageSource.coordinates &&
+      props.imageSource.coordinates &&
+      map.getSource(this.id)
+    ) {
+      const source = map.getSource(this.id) as ImageSource;
+      source.setCoordinates(props.imageSource.coordinates);
     }
   }
 
